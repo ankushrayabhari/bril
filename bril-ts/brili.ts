@@ -392,6 +392,10 @@ function evalCall(instr: bril.Operation, state: State): Action {
   return NEXT;
 }
 
+let tracing: boolean = true;
+let instrs: bril.Instruction[] = [];
+let stack: number = 0;
+
 /**
  * Interpret an instruction in a given environment, possibly updating the
  * environment. If the instruction branches to a new label, return that label;
@@ -399,6 +403,28 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * instruction or "end" to terminate the function.
  */
 function evalInstr(instr: bril.Instruction, state: State): Action {
+  if (tracing) {
+    switch (instr.op) {
+      case "store":
+      case "print":
+        tracing = false;
+    }
+  }
+
+  if (tracing && instrs.length >= 10 && stack == 0) {
+    tracing = false;
+  }
+
+  if (tracing) {
+    instrs.push(JSON.parse(JSON.stringify(instr)));
+  }
+
+  if (instr.op == "call") {
+    stack++;
+  } else if (instr.op == "ret") {
+    stack--;
+  }
+
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -776,6 +802,9 @@ function evalFunc(func: bril.Function, state: State): Value | null {
         }
       }
     } else if ('label' in line) {
+      if (tracing) {
+        instrs.push(JSON.parse(JSON.stringify({"label": line.label})));
+      }
       // Update CFG tracking for SSA phi nodes.
       state.lastlabel = state.curlabel;
       state.curlabel = line.label;
@@ -868,6 +897,7 @@ async function main() {
   try {
     let prog = JSON.parse(await readStdin()) as bril.Program;
     evalProg(prog);
+    console.log(JSON.stringify(instrs))
   }
   catch(e) {
     if (e instanceof BriliError) {
